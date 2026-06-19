@@ -3278,7 +3278,7 @@ function LoadLastPosition()
                 showCat = savedCat
             end
         end
-        if savedPos ~= nil then
+        if savedPos ~= nil and showCat ~= 48 then
             p = savedPos
             master_index = p
         end
