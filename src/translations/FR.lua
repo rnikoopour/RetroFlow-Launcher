@@ -318,6 +318,8 @@ return {
 ["Show_game_core_menu_colon"] = "Afficher le menu des cœurs de jeu :",
 ["Global_core_settings"] = "Paramètres globaux des cœurs",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "Plateforme :",
 ["Emulator_core"] = "Cœur de l'émulateur",
 ["Core_colon"] = "Cœur :",

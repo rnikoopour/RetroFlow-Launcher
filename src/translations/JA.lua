@@ -318,6 +318,8 @@ return {
 ["Show_game_core_menu_colon"] = "ゲームコアメニューを表示：",
 ["Global_core_settings"] = "グローバルコア設定",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "プラットフォーム：",
 ["Emulator_core"] = "エミュレーターコア",
 ["Core_colon"] = "コア：",

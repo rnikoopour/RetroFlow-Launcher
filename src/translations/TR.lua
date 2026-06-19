@@ -318,6 +318,8 @@ return {
 ["Show_game_core_menu_colon"] = "Oyun çekirdeği menüsünü göster:",
 ["Global_core_settings"] = "Genel çekirdek ayarları",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "Platform:",
 ["Emulator_core"] = "Emülatör çekirdeği",
 ["Core_colon"] = "Çekirdek:",

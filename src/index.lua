@@ -3163,7 +3163,8 @@ setTime = 0 -- 24 hour
 local filterGames = 0 -- All
 showMissingCovers = 1 -- On
 local smoothScrolling = 1 -- On
-local setResumePosition = 0 -- Off
+local setResumePosition = 0 -- 0=Off, 1=Last Only, 2=All Except Recent
+local category_positions = {}
 
 set2DViews = 1 -- On
 setChangeViews = 1 -- On
@@ -3251,6 +3252,15 @@ function SaveLastPosition()
             f:write("Cat=" .. tostring(showCat) .. "\nPos=" .. tostring(p))
             f:close()
         end
+    elseif setResumePosition == 2 then
+        category_positions[showCat] = p
+        local f = io.open(cur_dir .. "/category_positions.dat", "w")
+        if f ~= nil then
+            for cat, pos in pairs(category_positions) do
+                f:write(tostring(cat) .. "=" .. tostring(pos) .. "\n")
+            end
+            f:close()
+        end
     end
 end
 
@@ -3283,6 +3293,19 @@ function LoadLastPosition()
             master_index = p
         end
         check_for_out_of_bounds()
+    elseif setResumePosition == 2 and System.doesFileExist(cur_dir .. "/category_positions.dat") then
+        local f = System.openFile(cur_dir .. "/category_positions.dat", FREAD)
+        local size = System.sizeFile(f)
+        local str = System.readFile(f, size)
+        System.closeFile(f)
+        for cat, pos in str:gmatch("(%d+)=(%d+)") do
+            category_positions[tonumber(cat)] = tonumber(pos)
+        end
+        if showCat ~= 48 and category_positions[showCat] ~= nil then
+            p = category_positions[showCat]
+            master_index = p
+            check_for_out_of_bounds()
+        end
     end
 end
 
@@ -12858,7 +12881,7 @@ end
 local FileLoad = {}
 
 function PreloadRestoredCovers()
-    if setResumePosition ~= 1 then return end
+    if setResumePosition == 0 then return end
     local def = xCatLookup(showCat)
     local total = #def
     if total == 0 then return end
@@ -12875,6 +12898,160 @@ function PreloadRestoredCovers()
         preload(p - offset)
         preload(p + offset)
     end
+end
+
+function QueueCoversOutward(def, pos, min_i, max_i)
+    local function queue(i)
+        if i < min_i or i > max_i then return end
+        local file = def[i]
+        if file and file.icon_path and FileLoad[file] == nil then
+            FileLoad[file] = true
+            Threads.addTask(file, {Type="ImageLoad", Path=file.icon_path, Table=file, Index="ricon"})
+        end
+    end
+    queue(pos)
+    for offset = 1, math.max(pos - min_i, max_i - pos) do
+        queue(pos - offset)
+        queue(pos + offset)
+    end
+end
+
+local cached_cat = nil
+local cached_icons = {}
+
+local preload_cat = nil
+local preload_pos = 1
+local preload_icons = {}
+
+function SaveCategoryIconCache(cat, pos)
+    -- Free cache if we're caching a different category than before
+    if cached_cat ~= nil and cached_cat ~= cat then
+        for item, ricon in pairs(cached_icons) do
+            Graphics.freeImage(ricon)
+        end
+        cached_icons = {}
+        cached_cat = nil
+    end
+    if cat == 48 then return end
+    local def = xCatLookup(cat)
+    local total = #def
+    if total == 0 then return end
+    cached_cat = cat
+    cached_icons = {}
+    for offset = -5, 5 do
+        local i = pos + offset
+        if i >= 1 and i <= total then
+            local item = def[i]
+            if item and item.ricon then
+                cached_icons[item] = item.ricon
+                item.ricon = nil   -- FreeIcons() checks v.ricon before freeing; nil protects it
+                FileLoad[item] = nil
+            end
+        end
+    end
+end
+
+function RestoreCategoryIconCache(cat)
+    if cached_cat ~= cat then return end
+    for item, ricon in pairs(cached_icons) do
+        item.ricon = ricon
+        FileLoad[item] = true
+    end
+    cached_icons = {}
+end
+
+-- Nil out preloaded icons so FreeIcons() skips them; saves completed loads into preload_icons.
+function ProtectPreloadedCategory()
+    if preload_cat == nil then return end
+    local def = xCatLookup(preload_cat)
+    if not def then return end
+    preload_icons = {}
+    for offset = -3, 3 do
+        local i = preload_pos + offset
+        if i >= 1 and i <= #def then
+            local item = def[i]
+            if item and item.ricon then
+                preload_icons[item] = item.ricon
+                item.ricon = nil
+                FileLoad[item] = nil
+            end
+        end
+    end
+end
+
+-- If we switched to the preloaded category, restore its icons; otherwise free them.
+function RestoreOrFreePreloadedCategory(cat)
+    if preload_cat == nil then return end
+    if cat == preload_cat then
+        for item, ricon in pairs(preload_icons) do
+            item.ricon = ricon
+            FileLoad[item] = true
+        end
+    else
+        for item, ricon in pairs(preload_icons) do
+            Graphics.freeImage(ricon)
+        end
+    end
+    preload_icons = {}
+    preload_cat = nil
+end
+
+-- Synchronously load covers that are immediately visible to eliminate pop-in.
+-- Only loads covers not already in memory, so cache/preload hits are free.
+function SyncPreloadCurrent()
+    if setResumePosition == 0 then return end
+    local def = xCatLookup(showCat)
+    local total = #def
+    if total == 0 then return end
+    for offset = -2, 2 do
+        local i = p + offset
+        if i >= 1 and i <= total then
+            local item = def[i]
+            if item and item.icon_path and FileLoad[item] == nil then
+                item.ricon = Graphics.loadImage(item.icon_path)
+                FileLoad[item] = true
+            end
+        end
+    end
+end
+
+function OnCategoryLeave()
+    if setResumePosition == 2 then
+        category_positions[showCat] = p
+        SaveCategoryIconCache(showCat, p)
+    end
+    ProtectPreloadedCategory()
+end
+
+function OnCategoryArrive()
+    if setResumePosition == 2 and showCat ~= 48 then
+        p = category_positions[showCat] or 1
+    else
+        p = 1
+    end
+    master_index = p
+    startCovers = false
+    quick_scrolling_factor = 0
+    quick_scrolling_factor_goal = 0
+    flat_view_scroll_x = 0
+    flat_view_target_x = 0
+    GetInfoSelected()
+    FreeIcons()
+    if setResumePosition == 2 then RestoreCategoryIconCache(showCat) end
+    RestoreOrFreePreloadedCategory(showCat)
+    SyncPreloadCurrent()
+    PreloadAdjacentCategories()
+end
+
+function PreloadAdjacentCategories()
+    local next_cat = showCat + 1
+    local def = xCatLookup(next_cat)
+    if not def or #def == 0 then return end
+    local pos = (next_cat == 48) and 1 or ((setResumePosition == 2 and category_positions[next_cat]) or 1)
+    pos = math.max(1, math.min(#def, pos))
+    preload_cat = next_cat
+    preload_pos = pos
+    QueueCoversOutward(def, pos, math.max(1, pos - 3), math.min(#def, pos + 3))
 end
 
 flat_cleanup_table = nil
@@ -13473,19 +13650,7 @@ function drawCategory (def)
             end
 
             -- Pre-queue image loads outward from p so nearest covers load first
-            local function queue_cover(i)
-                if i < visible_start or i > visible_end then return end
-                local file = def[i]
-                if file and file.icon_path and FileLoad[file] == nil then
-                    FileLoad[file] = true
-                    Threads.addTask(file, {Type="ImageLoad", Path=file.icon_path, Table=file, Index="ricon"})
-                end
-            end
-            queue_cover(p)
-            for offset = 1, render_distance do
-                queue_cover(p + offset)
-                queue_cover(p - offset)
-            end
+            QueueCoversOutward(def, p, visible_start, visible_end)
 
             -- Draw covers in visible range
             for l = visible_start, visible_end do
@@ -13691,8 +13856,13 @@ function drawCategory (def)
 
         Graphics.fillRect(0, 960, 93, 96, white)
         Graphics.fillRect(0, 568, 96, 146, themeCol)-- selection
-    
-        
+
+        -- Pre-queue loads outward from p so nearest covers load first
+        do
+            local pre_rd = ((def)[p+7] and (def)[p+7].ricon) and 16 or 8
+            QueueCoversOutward(def, p, math.max(1, p - pre_rd), math.min(#def, p + pre_rd + 1))
+        end
+
         -- Write visible menu entries
         for l, file in pairs((def)) do
 
@@ -13777,6 +13947,12 @@ function drawCategory (def)
 
     -- Draw covers in 3D obj models
     else
+
+        -- Pre-queue loads outward from p so nearest covers load first
+        do
+            local pre_rd = ((def)[p+7] and (def)[p+7].ricon) and 16 or 8
+            QueueCoversOutward(def, p, math.max(1, p - pre_rd), math.min(#def, p + pre_rd + 1))
+        end
 
         for l, file in pairs((def)) do
 
@@ -14039,6 +14215,7 @@ functionTime = Timer.getTime(oneLoopTimer)
 
 LoadLastPosition()
 PreloadRestoredCovers()
+PreloadAdjacentCategories()
 
 -- Main loop
 while true do
@@ -18476,7 +18653,9 @@ while true do
         -- MENU 19 / #8 Resume position
         Font.print(fnt22, setting_x, setting_y8, lang_lines.Resume_position_colon, white)
         if setResumePosition == 1 then
-            Font.print(fnt22, setting_x_offset, setting_y8, lang_lines.On, white)
+            Font.print(fnt22, setting_x_offset, setting_y8, lang_lines.Last_only, white)
+        elseif setResumePosition == 2 then
+            Font.print(fnt22, setting_x_offset, setting_y8, lang_lines.All_except_recent, white)
         else
             Font.print(fnt22, setting_x_offset, setting_y8, lang_lines.Off, white)
         end
@@ -18569,10 +18748,10 @@ while true do
                     menuY = 0
 
                 elseif menuY == 8 then -- #8 Resume position
-                    if setResumePosition == 1 then
-                        setResumePosition = 0
+                    if setResumePosition < 2 then
+                        setResumePosition = setResumePosition + 1
                     else
-                        setResumePosition = 1
+                        setResumePosition = 0
                     end
                 end
 
@@ -21733,9 +21912,11 @@ while true do
 
                    -- CATEGORY - Move Backwards
 
+                    OnCategoryLeave()
+
                     -- empty the search results
-                    curTotal = #search_results_table   
-                    if #search_results_table ~= nil then 
+                    curTotal = #search_results_table
+                    if #search_results_table ~= nil then
                         search_results_table = {}
                     end
 
@@ -21879,26 +22060,18 @@ while true do
                     
 
                     hideBoxes = 0.8 -- used to be 8
-                    p = 1
-                    master_index = p
-                    startCovers = false
-                    -- Reset smooth scrolling factors to prevent position offset
-                    quick_scrolling_factor = 0
-                    quick_scrolling_factor_goal = 0
-                    -- Reset flat view scrolling variables for showView 5
-                    flat_view_scroll_x = 0
-                    flat_view_target_x = 0
-                    GetInfoSelected()
-                    FreeIcons()
+                    OnCategoryArrive()
 
 
                 else
 
                     -- CATEGORY - Move Forwards
 
+                    OnCategoryLeave()
+
                     -- empty the search results
-                    curTotal = #search_results_table   
-                    if #search_results_table ~= nil then 
+                    curTotal = #search_results_table
+                    if #search_results_table ~= nil then
                         search_results_table = {}
                     end
 
@@ -22062,17 +22235,7 @@ while true do
 
 
                     hideBoxes = 0.8 -- used to be 8
-                    p = 1
-                    master_index = p
-                    startCovers = false
-                    -- Reset smooth scrolling factors to prevent position offset
-                    quick_scrolling_factor = 0
-                    quick_scrolling_factor_goal = 0
-                    -- Reset flat view scrolling variables for showView 5
-                    flat_view_scroll_x = 0
-                    flat_view_target_x = 0
-                    GetInfoSelected()
-                    FreeIcons()
+                    OnCategoryArrive()
                 end
 
 

@@ -318,6 +318,8 @@ return {
 ["Show_game_core_menu_colon"] = "Näytä peliydinvalikko:",
 ["Global_core_settings"] = "Globaalit ydinasetukset",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "Alusta:",
 ["Emulator_core"] = "Emulaattorin ydin",
 ["Core_colon"] = "Ydin:",

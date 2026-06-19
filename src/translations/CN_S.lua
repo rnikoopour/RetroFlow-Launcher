@@ -318,6 +318,8 @@ return {
 ["Show_game_core_menu_colon"] = "显示游戏核心菜单：",
 ["Global_core_settings"] = "全局核心设置",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "平台：",
 ["Emulator_core"] = "模拟器核心",
 ["Core_colon"] = "核心：",

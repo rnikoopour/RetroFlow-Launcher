@@ -319,6 +319,8 @@ return {
 ["Show_game_core_menu_colon"] = "게임 코어 메뉴 표시:",
 ["Global_core_settings"] = "전역 코어 설정",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "플랫폼:",
 ["Emulator_core"] = "에뮬레이터 코어",
 ["Core_colon"] = "코어:",

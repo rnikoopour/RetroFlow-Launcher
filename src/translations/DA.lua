@@ -318,6 +318,8 @@ return {
 ["Show_game_core_menu_colon"] = "Vis spilkernemenu:",
 ["Global_core_settings"] = "Globale kerneindstillinger",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "Platform:",
 ["Emulator_core"] = "Emulatorkerne",
 ["Core_colon"] = "Kerne:",

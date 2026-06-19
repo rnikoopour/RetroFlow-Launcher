@@ -319,6 +319,8 @@ return {
 ["Show_game_core_menu_colon"] = "Spielkern-Menü anzeigen:",
 ["Global_core_settings"] = "Globale Kerneinstellungen",
 ["Resume_position_colon"] = "Resume position:",
+["Last_only"] = "Last Only",
+["All_except_recent"] = "All Except Recent",
 ["Platform_colon"] = "Plattform:",
 ["Emulator_core"] = "Emulator-Kern",
 ["Core_colon"] = "Kern:",
