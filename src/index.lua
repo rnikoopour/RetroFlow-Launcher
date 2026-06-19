@@ -12920,8 +12920,7 @@ local cached_cat = nil
 local cached_icons = {}
 
 local preload_cat = nil
-local preload_pos = 1
-local preload_icons = {}
+local preload_wrappers = {}  -- item → wrapper{ricon=nil}; invisible to FreeIcons's remove loop
 
 function SaveCategoryIconCache(cat, pos)
     -- Free cache if we're caching a different category than before
@@ -12960,41 +12959,6 @@ function RestoreCategoryIconCache(cat)
     cached_icons = {}
 end
 
--- Nil out preloaded icons so FreeIcons() skips them; saves completed loads into preload_icons.
-function ProtectPreloadedCategory()
-    if preload_cat == nil then return end
-    local def = xCatLookup(preload_cat)
-    if not def then return end
-    preload_icons = {}
-    for offset = -3, 3 do
-        local i = preload_pos + offset
-        if i >= 1 and i <= #def then
-            local item = def[i]
-            if item and item.ricon then
-                preload_icons[item] = item.ricon
-                item.ricon = nil
-                FileLoad[item] = nil
-            end
-        end
-    end
-end
-
--- If we switched to the preloaded category, restore its icons; otherwise free them.
-function RestoreOrFreePreloadedCategory(cat)
-    if preload_cat == nil then return end
-    if cat == preload_cat then
-        for item, ricon in pairs(preload_icons) do
-            item.ricon = ricon
-            FileLoad[item] = true
-        end
-    else
-        for item, ricon in pairs(preload_icons) do
-            Graphics.freeImage(ricon)
-        end
-    end
-    preload_icons = {}
-    preload_cat = nil
-end
 
 -- Synchronously load covers that are immediately visible to eliminate pop-in.
 -- Only loads covers not already in memory, so cache/preload hits are free.
@@ -13020,7 +12984,6 @@ function OnCategoryLeave()
         category_positions[showCat] = p
         SaveCategoryIconCache(showCat, p)
     end
-    ProtectPreloadedCategory()
 end
 
 function OnCategoryArrive()
@@ -13036,9 +12999,38 @@ function OnCategoryArrive()
     flat_view_scroll_x = 0
     flat_view_target_x = 0
     GetInfoSelected()
+
+    -- Transfer any completed preloaded covers to item.ricon before FreeIcons runs.
+    -- Nil them temporarily so FreeIcons's "if v.ricon then freeImage" skips them.
+    local transferred = {}
+    if preload_cat == showCat then
+        for item, wrapper in pairs(preload_wrappers) do
+            if wrapper.ricon then
+                transferred[item] = wrapper.ricon
+                wrapper.ricon = nil
+                item.ricon = nil
+                FileLoad[item] = nil
+            else
+                Threads.remove(wrapper)
+            end
+        end
+    else
+        for item, wrapper in pairs(preload_wrappers) do
+            if wrapper.ricon then Graphics.freeImage(wrapper.ricon) end
+            Threads.remove(wrapper)
+        end
+    end
+    preload_wrappers = {}
+    preload_cat = nil
+
     FreeIcons()
+
+    for item, ricon in pairs(transferred) do
+        item.ricon = ricon
+        FileLoad[item] = true
+    end
+
     if setResumePosition == 2 then RestoreCategoryIconCache(showCat) end
-    RestoreOrFreePreloadedCategory(showCat)
     SyncPreloadCurrent()
     PreloadAdjacentCategories()
 end
@@ -13050,8 +13042,23 @@ function PreloadAdjacentCategories()
     local pos = (next_cat == 48) and 1 or ((setResumePosition == 2 and category_positions[next_cat]) or 1)
     pos = math.max(1, math.min(#def, pos))
     preload_cat = next_cat
-    preload_pos = pos
-    QueueCoversOutward(def, pos, math.max(1, pos - 3), math.min(#def, pos + 3))
+
+    local min_i = math.max(1, pos - 5)
+    local max_i = math.min(#def, pos + 5)
+    local function queue_wrapped(i)
+        if i < min_i or i > max_i then return end
+        local item = def[i]
+        if item and item.icon_path and not preload_wrappers[item] then
+            local wrapper = {}
+            preload_wrappers[item] = wrapper
+            Threads.addTask(wrapper, {Type="ImageLoad", Path=item.icon_path, Table=wrapper, Index="ricon"})
+        end
+    end
+    queue_wrapped(pos)
+    for offset = 1, math.max(pos - min_i, max_i - pos) do
+        queue_wrapped(pos - offset)
+        queue_wrapped(pos + offset)
+    end
 end
 
 flat_cleanup_table = nil
@@ -13072,8 +13079,6 @@ function free_loaded_icon(file)
 end
 
 function FreeIcons()
-    Threads.bumpGeneration()
-
     flat_cleanup_table = nil
     flat_cleanup_start = nil
     flat_cleanup_end = nil
