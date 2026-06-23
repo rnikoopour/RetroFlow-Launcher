@@ -12989,6 +12989,8 @@ end
 function OnCategoryArrive()
     if setResumePosition == 2 and showCat ~= 48 then
         p = category_positions[showCat] or 1
+        local total = #xCatLookup(showCat)
+        if total > 0 and p > total then p = total end
     else
         p = 1
     end
